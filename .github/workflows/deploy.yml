@@ -1,0 +1,51 @@
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject token into HTML
+        env:
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          python3 -c "
+          import os, base64
+          token = os.environ['DISPATCH_TOKEN']
+          encoded = base64.b64encode(token.encode()).decode()
+          with open('index.html', 'r') as f:
+              content = f.read()
+          content = content.replace('__DISPATCH_TOKEN__', encoded)
+          with open('index.html', 'w') as f:
+              f.write(content)
+          print('Token encoded and injected')
+          "
+
+      - name: Verify injection worked
+        run: |
+          if grep -q '__DISPATCH_TOKEN__' index.html; then
+            echo "ERROR: Token was NOT injected - placeholder still present"
+            exit 1
+          else
+            echo "OK: Token injected successfully"
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - uses: actions/deploy-pages@v4
+        id: deployment
